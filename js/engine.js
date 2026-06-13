@@ -318,6 +318,15 @@
   // ============================ map runtime ============================
   let map = null;
   let lowerBuf = null, upperBuf = null;
+  let hdActive = false; // current map renders through the WebGL HD-2D path
+  // dev override until the editor exposes per-map HD-2D settings:
+  // ?hd2d=1 forces the HD-2D renderer on, ?hd2d=0 forces it off
+  const hdOverride = new URLSearchParams(location.search).get("hd2d");
+  function hdWanted() {
+    if (hdOverride === "1") return true;
+    if (hdOverride === "0") return false;
+    return !!(map && map.hd2d && map.hd2d.enabled);
+  }
   let evRTs = [];
   let blockingRun = false;       // an action/touch/autorun interpreter is active
   const parallels = new Map();   // evRT -> running flag
@@ -343,12 +352,24 @@
     if (c.selfSw && !G.selfSw[G.mapId + ":" + evId + ":" + c.selfSw]) return false;
     return true;
   }
+  // HD-2D point lights are authored as events named "light [#rrggbb] [radius]",
+  // e.g. "light #ff9944 260". The light follows the event and obeys its pages.
+  function parseLight(name) {
+    if (!/^light\b/i.test(name || "")) return null;
+    const light = { color: "#ffcc88", radius: 180 };
+    for (const tok of String(name).slice(5).trim().split(/\s+/)) {
+      if (/^#[0-9a-fA-F]{6}$/.test(tok)) light.color = tok;
+      else if (/^\d+$/.test(tok)) light.radius = Number(tok);
+    }
+    return light;
+  }
   function makeEvRT(evData) {
     const rt = {
       ev: evData, x: evData.x, y: evData.y, rx: evData.x, ry: evData.y,
       dir: 0, frame: 1, animT: 0, moving: false, tx: 0, ty: 0,
       page: null, pageIndex: -1, erased: false, locked: false,
       moveT: 30 + rnd(90), route: null, speed: 0.05, charsetIdx: -1, kind: "",
+      light: parseLight(evData.name),
     };
     refreshPage(rt);
     return rt;
@@ -401,6 +422,8 @@
         }
       }
     }
+    hdActive = hdWanted() && typeof GLRender !== "undefined" && GLRender.available();
+    if (hdActive) GLRender.setMap(lowerBuf, upperBuf, map);
   }
 
   function loadMap(mapId) {
@@ -818,8 +841,6 @@
     const p = G.player;
     const camX = clamp(p.rx * TILE + TILE / 2 - SCREEN_W / 2, 0, Math.max(0, map.width * TILE - SCREEN_W));
     const camY = clamp(p.ry * TILE + TILE / 2 - SCREEN_H / 2, 0, Math.max(0, map.height * TILE - SCREEN_H));
-    ctx.drawImage(lowerBuf, -camX, -camY);
-
     const drawables = [];
     for (const rt of evRTs) {
       if (rt.erased || !rt.page || rt.charsetIdx < 0) continue;
@@ -833,11 +854,37 @@
       if (oa !== ob) return oa - ob;
       return a.ry - b.ry;
     });
-    for (const d of drawables) {
-      const idx = d === p ? p.charsetIdx : d.charsetIdx;
-      Assets.drawChar(ctx, idx, d.dir, walkFrame(d), Math.round(d.rx * TILE - camX), Math.round(d.ry * TILE - 8 - camY));
+    if (hdActive) {
+      const sprites = [];
+      for (const d of drawables) {
+        const idx = d === p ? p.charsetIdx : d.charsetIdx;
+        if (idx < 0) continue;
+        const pri = d.page ? d.page.priority : "same";
+        sprites.push({
+          canvas: Assets.charFrameCanvas(idx, d.dir, walkFrame(d)),
+          rx: d.rx, ry: d.ry,
+          pr: pri === "below" ? 0 : pri === "above" ? 2 : 1,
+        });
+      }
+      const lights = [];
+      for (const rt of evRTs) {
+        if (rt.light && !rt.erased && rt.page) {
+          lights.push({ rx: rt.rx, ry: rt.ry, color: rt.light.color, radius: rt.light.radius });
+        }
+      }
+      const frame = GLRender.renderFrame(SCREEN_W, SCREEN_H, camX, camY, sprites,
+        { focus: { rx: p.rx, ry: p.ry }, lights: lights });
+      if (frame) ctx.drawImage(frame, 0, 0);
+      else hdActive = false; // GL context lost mid-game — finish on Canvas 2D
     }
-    ctx.drawImage(upperBuf, -camX, -camY);
+    if (!hdActive) {
+      ctx.drawImage(lowerBuf, -camX, -camY);
+      for (const d of drawables) {
+        const idx = d === p ? p.charsetIdx : d.charsetIdx;
+        Assets.drawChar(ctx, idx, d.dir, walkFrame(d), Math.round(d.rx * TILE - camX), Math.round(d.ry * TILE - 8 - camY));
+      }
+      ctx.drawImage(upperBuf, -camX, -camY);
+    }
     if (scene === "map") Plugins.fireRender(ctx, { w: SCREEN_W, h: SCREEN_H, t: globalT, map: map, camX: camX, camY: camY });
   }
 

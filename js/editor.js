@@ -13,8 +13,9 @@
   let curMapId = 1;
   let layer = "auto";        // auto | ground | decor | decor2 | over
   let tool = "pen";          // pen | erase | rect | circle | fill | shadow
-  let mode = "map";          // map | event | pass | start
+  let mode = "map";          // map | event | pass | start | height
   let selectedTile = 1;
+  let heightVal = 1;         // HD-2D elevation value painted in height mode (0–9)
   let zoom = 0.75;
   let selectedEvent = null;
   let hoverCell = null;
@@ -188,6 +189,7 @@
     $("save-ind").textContent = "● unsaved";
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveNow, 700);
+    hdMarkDirty(); // keep the HD-2D preview in sync with edits
   }
   function saveNow() {
     try {
@@ -422,6 +424,20 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
       }
     }
   }
+  function drawHeightOverlay(g, m) {
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.font = "bold 18px monospace";
+    for (let y = 0; y < m.height; y++) {
+      for (let x = 0; x < m.width; x++) {
+        const hv = (m.heights && m.heights[y * m.width + x]) || 0;
+        if (!hv) continue;
+        g.fillStyle = "rgba(110,160,255," + Math.min(0.16 + hv * 0.09, 0.55) + ")";
+        g.fillRect(x * TILE, y * TILE, TILE, TILE);
+        g.fillStyle = "#eaf2ff";
+        g.fillText(String(hv), x * TILE + TILE / 2, y * TILE + TILE / 2 + 1);
+      }
+    }
+  }
   function renderMap() {
     const m = curMap();
     if (!m) return;
@@ -455,6 +471,7 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
     for (let y = 0; y <= m.height; y++) { g.moveTo(0, y * TILE); g.lineTo(m.width * TILE, y * TILE); }
     g.stroke();
     if (mode === "pass") drawPassOverlay(g, m);
+    if (mode === "height") drawHeightOverlay(g, m);
     // events
     if (mode === "event" || mode === "start") {
       for (const ev of m.events) {
@@ -508,7 +525,7 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
     }
     // hover / drag previews
     if (hoverCell && !pasteMode) {
-      if ((tool === "rect" || tool === "circle") && rectStart && painting && mode === "map") {
+      if ((tool === "rect" || tool === "circle") && rectStart && painting && (mode === "map" || mode === "height")) {
         const r2 = normRect(rectStart, hoverCell);
         g.strokeStyle = "#ffd86a";
         g.lineWidth = 2 / zoom;
@@ -572,12 +589,12 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
   // ---- undo / redo (full map snapshots: tiles, shadows, passability, events) ----
   function snapshotOf(mapId) {
     const m = RA.byId(proj.maps, mapId);
-    return { mapId, layers: RA.clone(m.layers), shadows: m.shadows.slice(), passOv: m.passOv.slice(), events: RA.clone(m.events) };
+    return { mapId, layers: RA.clone(m.layers), shadows: m.shadows.slice(), passOv: m.passOv.slice(), heights: heightsOf(m).slice(), events: RA.clone(m.events) };
   }
   function applySnapshot(s) {
     const m = RA.byId(proj.maps, s.mapId);
     if (!m) return;
-    m.layers = s.layers; m.shadows = s.shadows; m.passOv = s.passOv; m.events = s.events;
+    m.layers = s.layers; m.shadows = s.shadows; m.passOv = s.passOv; m.heights = s.heights; m.events = s.events;
     if (curMapId !== s.mapId) { curMapId = s.mapId; rebuildMapList(); }
     selectedEvent = null;
     touch(); renderMap(); refreshToolbar();
@@ -661,6 +678,32 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
     m.passOv[cell.y * m.width + cell.x] = val;
     touch(); renderMap();
   }
+  // HD-2D elevation layer (projects from before the heights layer existed may
+  // lack the array until their next load runs the migration)
+  function heightsOf(m) {
+    const n = m.width * m.height;
+    if (!m.heights || m.heights.length !== n) m.heights = new Array(n).fill(0);
+    return m.heights;
+  }
+  function paintHeight(cell, val) {
+    const m = curMap();
+    heightsOf(m)[cell.y * m.width + cell.x] = val;
+    touch(); renderMap();
+  }
+  function floodFillHeight(x, y, val) {
+    const m = curMap(), arr = heightsOf(m);
+    const target = arr[y * m.width + x] || 0;
+    if (target === val) return;
+    const stack = [[x, y]];
+    while (stack.length) {
+      const [cx, cy] = stack.pop();
+      if (cx < 0 || cy < 0 || cx >= m.width || cy >= m.height) continue;
+      const i = cy * m.width + cx;
+      if ((arr[i] || 0) !== target) continue;
+      arr[i] = val;
+      stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
+    }
+  }
 
   // ---- clipboard ----
   function canCopy() {
@@ -685,13 +728,15 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
     if (mode !== "map" || !selection) { flashStatus("Shift+drag on the map to select an area first"); return; }
     const m = curMap(), r = selection;
     const w = r.x2 - r.x1 + 1, h2 = r.y2 - r.y1 + 1;
-    const clip = { w, h: h2, layers: {}, shadows: [] };
+    const clip = { w, h: h2, layers: {}, shadows: [], heights: [] };
     for (const ln of LAYER_ORDER) clip.layers[ln] = [];
+    const hts = heightsOf(m);
     for (let y = r.y1; y <= r.y2; y++) {
       for (let x = r.x1; x <= r.x2; x++) {
         const i = y * m.width + x;
         for (const ln of LAYER_ORDER) clip.layers[ln].push(m.layers[ln][i]);
         clip.shadows.push(m.shadows[i]);
+        clip.heights.push(hts[i] || 0);
       }
     }
     clipTiles = clip;
@@ -703,6 +748,7 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
           const i = y * m.width + x;
           for (const ln of LAYER_ORDER) m.layers[ln][i] = 0;
           m.shadows[i] = 0;
+          heightsOf(m)[i] = 0;
         }
       }
       touch(); renderMap();
@@ -735,6 +781,7 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
           const si = dy * clipTiles.w + dx, di = y * m.width + x;
           for (const ln of LAYER_ORDER) m.layers[ln][di] = clipTiles.layers[ln][si];
           m.shadows[di] = clipTiles.shadows[si];
+          heightsOf(m)[di] = (clipTiles.heights && clipTiles.heights[si]) || 0;
         }
       }
       touch(); renderMap();
@@ -778,6 +825,11 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
         paintShadow(cell, quadFromMouse(e), false);
         return;
       }
+      if (mode === "height") { // eyedropper: pick up the elevation under the cursor
+        heightVal = heightsOf(curMap())[cell.y * curMap().width + cell.x] || 0;
+        setStatus();
+        return;
+      }
       if (mode === "map") { // eyedropper from the topmost visible tile
         const ln = layer === "auto" ? topLayerAt(cell.x, cell.y) : layer;
         const t = getCell(cell.x, cell.y, ln) || getCell(cell.x, cell.y, "ground");
@@ -801,6 +853,14 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
       passVal = cur === 0 ? 2 : cur === 2 ? 1 : 0; // auto → force block → force pass → auto
       painting = true;
       paintPass(cell, passVal);
+      return;
+    }
+    if (mode === "height") {
+      pushUndo();
+      painting = true;
+      if (tool === "rect" || tool === "circle") { rectStart = cell; renderMap(); }
+      else if (tool === "fill") { floodFillHeight(cell.x, cell.y, heightVal); touch(); renderMap(); }
+      else paintHeight(cell, tool === "erase" ? 0 : heightVal);
       return;
     }
     if (mode === "event") {
@@ -839,6 +899,8 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
       paintShadow(cell, q, shadowSet);
     } else if (mode === "pass" && painting) {
       paintPass(cell, passVal);
+    } else if (mode === "height" && painting && tool !== "rect" && tool !== "circle" && tool !== "fill") {
+      paintHeight(cell, tool === "erase" ? 0 : heightVal);
     } else if (mode === "event" && dragEvent && (dragEvent.x !== cell.x || dragEvent.y !== cell.y)) {
       if (!eventAt(cell.x, cell.y)) {
         if (!dragPushed) { dragPushed = true; pushUndo(); dragEvent = curMap().events.find((ev) => ev.id === dragEvent.id); selectedEvent = dragEvent; }
@@ -856,7 +918,8 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
       selecting = false; selAnchor = null;
       refreshToolbar(); renderMap();
     }
-    if (mode === "map" && painting && (tool === "rect" || tool === "circle") && rectStart && hoverCell) {
+    if ((mode === "map" || mode === "height") && painting && (tool === "rect" || tool === "circle") && rectStart && hoverCell) {
+      const m = curMap();
       const r = normRect(rectStart, hoverCell);
       const cx = (r.x1 + r.x2 + 1) / 2, cy = (r.y1 + r.y2 + 1) / 2;
       const rx = (r.x2 - r.x1 + 1) / 2, ry = (r.y2 - r.y1 + 1) / 2;
@@ -866,7 +929,8 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
             const nx = (x + 0.5 - cx) / rx, ny = (y + 0.5 - cy) / ry;
             if (nx * nx + ny * ny > 1) continue;
           }
-          setCell(x, y, selectedTile, resolvePaintLayer(selectedTile, x, y));
+          if (mode === "height") heightsOf(m)[y * m.width + x] = heightVal;
+          else setCell(x, y, selectedTile, resolvePaintLayer(selectedTile, x, y));
         }
       }
       touch();
@@ -896,6 +960,7 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
     s += "  ·  " + (mode === "map" ? TOOL_LABELS[tool] + " / " + LAYER_LABELS[layer]
       : mode === "event" ? "Event mode (double-click = new/edit, drag = move)"
       : mode === "pass" ? "Passability (click cycles auto → ✕ block → ○ pass)"
+      : mode === "height" ? "Heights — painting " + heightVal + " with " + TOOL_LABELS[tool] + " (keys 0–9 set the value, right-click picks, Eraser clears)"
       : "Click the map to set the start position");
     if (hoverCell && m) {
       s += "  ·  " + hoverCell.x + "," + hoverCell.y;
@@ -1534,12 +1599,29 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
         h("button", { class: "mini", onclick() { if (pick.id) { encTroops.push(pick.id); redrawTroops(); } } }, "+ add")));
     }
     redrawTroops();
+    const hd = m.hd2d || {};
+    const hdW = {
+      enabled: !!hd.enabled,
+      tilt: Math.min(89, Math.max(25, Number(hd.tilt) || 50)),
+      bloom: !!hd.bloom, dof: !!hd.dof, fog: !!hd.fog,
+      fogColor: (hd.fog && hd.fog.color) || "#101018",
+      lights: !!hd.lights,
+      ambient: hd.ambient == null ? 0.45 : Number(hd.ambient),
+    };
+    const fogColorIn = h("input", { type: "color", value: hdW.fogColor,
+      oninput(e) { hdW.fogColor = e.target.value; } });
     const content = h("div", null,
       field("Name", tIn(work, "name")),
       row(field("Width", nIn(work, "width", 5, 200)), field("Height", nIn(work, "height", 5, 200))),
       field("Music", sel(work, "music", MUSIC_OPTS())),
       field("Encounter rate (steps, 0 = off)", nIn(work, "rate", 0, 999)),
       h("div", { class: "fld" }, h("span", null, "Encounter troops"), troopBox),
+      h("div", { class: "fld" }, h("span", null, "HD-2D (3D perspective rendering)")),
+      row(field("Enabled", chk(hdW, "enabled")), field("Camera tilt (25–89°)", nIn(hdW, "tilt", 25, 89))),
+      row(field("Bloom", chk(hdW, "bloom")), field("Depth of field", chk(hdW, "dof"))),
+      row(field("Distance fog", chk(hdW, "fog")), field("Fog color", fogColorIn)),
+      row(field("Point lights", chk(hdW, "lights")), field("Ambient light (0–2)", nIn(hdW, "ambient", 0, 2, 0.05))),
+      h("div", { class: "dim" }, "Paint elevation in Height mode (H). Lights are events named “light #rrggbb radius”. Preview with Game ▸ HD-2D Preview."),
     );
     modal({
       title: "Map Properties",
@@ -1549,8 +1631,15 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
           m.name = work.name;
           m.music = work.music;
           m.encounters = { rate: work.rate, troops: encTroops };
+          m.hd2d = {
+            enabled: hdW.enabled, tilt: hdW.tilt,
+            bloom: hdW.bloom, dof: hdW.dof,
+            fog: hdW.fog ? { color: hdW.fogColor } : false,
+            lights: hdW.lights, ambient: hdW.ambient,
+          };
           if (work.width !== m.width || work.height !== m.height) resizeMap(m, work.width, work.height);
           close(); rebuildMapList(); renderMap(); touch();
+          hdMarkDirty();
         } },
         { label: "Cancel" },
       ],
@@ -1568,8 +1657,146 @@ window.RPGATLAS_GAME_ID = ${JSON.stringify(gameId)};
     for (const ln of LAYER_ORDER) m.layers[ln] = remap(m.layers[ln], ln === "ground" ? Assets.T.grass : 0);
     m.shadows = remap(m.shadows, 0);
     m.passOv = remap(m.passOv, 0);
+    m.heights = remap(heightsOf(m), 0);
     m.width = w; m.height = h2;
     m.events = m.events.filter((e) => e.x < w && e.y < h2);
+  }
+
+  // ============================ HD-2D live preview ============================
+  // A floating panel that renders the current map through the game's WebGL2
+  // renderer (js/gl.js) using the map's own hd2d settings. It rebuilds after
+  // edits (debounced — touch() marks it dirty) and re-renders every frame.
+  let hdPanel = null, hdCanvas = null, hdDirty = true, hdMapId = 0, hdLastBuild = 0, hdRAF = 0;
+  let hdCamX = 0, hdCamY = 0; // camera look-at center, world px
+  let hdKick = null;          // one-shot refresh timer (covers rAF pauses in hidden windows)
+
+  function hdMarkDirty() {
+    hdDirty = true;
+    if (!hdPanel) return;
+    clearTimeout(hdKick);
+    hdKick = setTimeout(hdRenderOnce, 400);
+  }
+
+  function hdParseLight(name) { // mirrors the engine's light-event convention
+    if (!/^light\b/i.test(name || "")) return null;
+    const light = { color: "#ffcc88", radius: 180 };
+    for (const tok of String(name).slice(5).trim().split(/\s+/)) {
+      if (/^#[0-9a-fA-F]{6}$/.test(tok)) light.color = tok;
+      else if (/^\d+$/.test(tok)) light.radius = Number(tok);
+    }
+    return light;
+  }
+  function hdBuildBuffers(m) { // same composition as the engine's prerenderMap
+    const lower = document.createElement("canvas");
+    lower.width = m.width * TILE; lower.height = m.height * TILE;
+    const upper = document.createElement("canvas");
+    upper.width = lower.width; upper.height = lower.height;
+    const lg = lower.getContext("2d"), ug = upper.getContext("2d");
+    lg.fillStyle = "#101018"; lg.fillRect(0, 0, lower.width, lower.height);
+    for (let y = 0; y < m.height; y++) {
+      for (let x = 0; x < m.width; x++) {
+        const i = y * m.width + x;
+        Assets.drawTile(lg, m.layers.ground[i], x * TILE, y * TILE);
+        Assets.drawTile(lg, m.layers.decor[i], x * TILE, y * TILE);
+        Assets.drawTile(lg, m.layers.decor2[i], x * TILE, y * TILE);
+        Assets.drawTile(ug, m.layers.over[i], x * TILE, y * TILE);
+      }
+    }
+    if (m.shadows) {
+      const H = TILE / 2;
+      lg.fillStyle = "rgba(10,10,26,0.35)";
+      for (let y = 0; y < m.height; y++) {
+        for (let x = 0; x < m.width; x++) {
+          const mask = m.shadows[y * m.width + x];
+          if (!mask) continue;
+          if (mask & 1) lg.fillRect(x * TILE, y * TILE, H, H);
+          if (mask & 2) lg.fillRect(x * TILE + H, y * TILE, H, H);
+          if (mask & 4) lg.fillRect(x * TILE, y * TILE + H, H, H);
+          if (mask & 8) lg.fillRect(x * TILE + H, y * TILE + H, H, H);
+        }
+      }
+    }
+    return { lower, upper };
+  }
+  function hdRenderOnce() {
+    if (!hdPanel) return;
+    const m = curMap();
+    if (!m) return;
+    const now = performance.now();
+    if ((hdDirty || hdMapId !== m.id) && now - hdLastBuild > 300) {
+      if (hdMapId !== m.id) { hdCamX = m.width * TILE / 2; hdCamY = m.height * TILE / 2; }
+      const b = hdBuildBuffers(m);
+      GLRender.setMap(b.lower, b.upper, m);
+      hdMapId = m.id; hdDirty = false; hdLastBuild = now;
+    }
+    const w = hdCanvas.width, hgt = hdCanvas.height;
+    const camX = Math.max(0, Math.min(hdCamX - w / 2, m.width * TILE - w));
+    const camY = Math.max(0, Math.min(hdCamY - hgt / 2, m.height * TILE - hgt));
+    const sprites = [], lights = [];
+    for (const ev of m.events) {
+      const pg = ev.pages[0];
+      const L = hdParseLight(ev.name);
+      if (L) lights.push({ rx: ev.x, ry: ev.y, color: L.color, radius: L.radius });
+      if (pg && pg.charset) {
+        const ci = Assets.charsetIndex(pg.charset);
+        if (ci >= 0) sprites.push({ canvas: Assets.charFrameCanvas(ci, pg.dir || 0, 1), rx: ev.x, ry: ev.y, pr: 1 });
+      }
+    }
+    const frame = GLRender.renderFrame(w, hgt, camX, camY, sprites,
+      { lights, focus: { rx: (camX + w / 2) / TILE, ry: (camY + hgt / 2) / TILE } });
+    if (frame) hdCanvas.getContext("2d").drawImage(frame, 0, 0);
+  }
+  function hdFrame() {
+    if (!hdPanel) return;
+    hdRenderOnce();
+    hdRAF = requestAnimationFrame(hdFrame);
+  }
+  function closeHdPreview() {
+    if (!hdPanel) return;
+    cancelAnimationFrame(hdRAF);
+    clearTimeout(hdKick);
+    window.removeEventListener("mousemove", hdPanel._move);
+    window.removeEventListener("mouseup", hdPanel._up);
+    hdPanel.remove();
+    hdPanel = null; hdCanvas = null;
+    refreshToolbar();
+  }
+  function toggleHdPreview() {
+    if (hdPanel) { closeHdPreview(); return; }
+    if (typeof GLRender === "undefined" || !GLRender.available()) {
+      flashStatus("HD-2D preview needs WebGL2, which is unavailable in this browser");
+      return;
+    }
+    hdCanvas = h("canvas", { width: 480, height: 360, style: "display:block;cursor:grab" });
+    hdPanel = h("div", {
+      style: "position:fixed;right:18px;bottom:38px;z-index:90;border:1px solid #3a3a4a;border-radius:6px;" +
+        "overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,0.5);background:#101018",
+    },
+      h("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 8px;background:#22222e;color:#cfd2e0;font:12px system-ui" },
+        h("span", null, "HD-2D Preview — drag to pan"),
+        h("button", { class: "mini", onclick: closeHdPreview }, "✕")),
+      hdCanvas);
+    let drag = null;
+    hdCanvas.addEventListener("mousedown", (e) => {
+      drag = { x: e.clientX, y: e.clientY };
+      hdCanvas.style.cursor = "grabbing";
+      e.preventDefault();
+    });
+    hdPanel._move = (e) => {
+      if (!drag) return;
+      hdCamX -= e.clientX - drag.x;
+      hdCamY -= (e.clientY - drag.y) * 1.6; // the tilt foreshortens the z axis
+      drag = { x: e.clientX, y: e.clientY };
+    };
+    hdPanel._up = () => { drag = null; if (hdCanvas) hdCanvas.style.cursor = "grab"; };
+    window.addEventListener("mousemove", hdPanel._move);
+    window.addEventListener("mouseup", hdPanel._up);
+    document.body.appendChild(hdPanel);
+    const m = curMap();
+    hdCamX = m.width * TILE / 2; hdCamY = m.height * TILE / 2;
+    hdMapId = 0; hdDirty = true; hdLastBuild = 0;
+    hdFrame();
+    refreshToolbar();
   }
 
   // ============================ command definitions ============================
@@ -3078,6 +3305,8 @@ atlas.onMapLoad((map) => {
 <li><b>Tools</b>: Pen <kbd>B</kbd>, Eraser <kbd>E</kbd>, Rectangle <kbd>R</kbd>, Circle <kbd>O</kbd>, Fill <kbd>F</kbd>, Shadow Pen <kbd>S</kbd>. Right-click = pick tile from the map.</li>
 <li><b>Layers</b>: Auto <kbd>0</kbd> places terrain on Layer 1 and stacks decorations on Layers 2–3 automatically. <kbd>1</kbd>–<kbd>4</kbd> select Ground / Decor / Decor&nbsp;2 / Overhead directly (Overhead draws above the player).</li>
 <li><b>Shadow Pen</b>: left-click paints a half-tile shadow quadrant, right-click erases it.</li>
+<li><b>Height Mode</b> <kbd>H</kbd>: paint HD-2D elevation with Pen / Rectangle / Circle / Fill. Keys <kbd>0</kbd>–<kbd>9</kbd> set the value, right-click picks it up, Eraser clears. Raised tiles become 3D blocks when the map's HD-2D rendering is on.</li>
+<li><b>HD-2D</b>: enable per map in Game ▸ Map Properties (camera tilt, bloom, depth of field, fog, point lights). Game ▸ HD-2D Preview opens a live panel that follows your edits — drag it to pan. Lights are events named “light #rrggbb radius”.</li>
 <li><b>Selection</b>: Shift+drag selects an area. Cut <kbd>Ctrl+X</kbd> / Copy <kbd>Ctrl+C</kbd> / Paste <kbd>Ctrl+V</kbd>, then click to stamp (Esc cancels). Works for events too.</li>
 <li>Undo <kbd>Ctrl+Z</kbd> · Redo <kbd>Ctrl+Y</kbd> · Zoom <kbd>+</kbd>/<kbd>−</kbd>, <kbd>Ctrl</kbd>+wheel, <kbd>Ctrl+0</kbd> = 100%.</li>
 </ul>
@@ -3158,6 +3387,8 @@ atlas.onMapLoad((map) => {
     circle: svgIcon('<ellipse cx="10" cy="10" rx="6.6" ry="5.2"/>'),
     fill: svgIcon('<path d="M8.2 2.2v2.6"/><path d="M8.2 3.8l6.2 6.2L9 15.4 3.4 9.8z"/><path d="M16.2 12.8s1.7 2.1 1.7 3.3a1.7 1.7 0 1 1-3.4 0c0-1.2 1.7-3.3 1.7-3.3z"/>'),
     shadow: svgIcon('<rect x="3.5" y="3.5" width="13" height="13"/><path d="M16.5 3.5 3.5 16.5"/><path d="M16.5 3.5v13h-13z" fill="currentColor" stroke="none" opacity="0.45"/>'),
+    height: svgIcon('<path d="M3 16.5h4v-4h4v-4h4v-5"/><path d="M12.5 6 15 3.5 17.5 6"/>'),
+    hd2d: svgIcon('<path d="M2.5 14.5l5-8 4 6 2-3 4 5"/><path d="M2.5 17h15"/>'),
     zoomin: svgIcon('<circle cx="8.8" cy="8.8" r="5.6"/><path d="M13 13l4.3 4.3"/><path d="M6.3 8.8h5M8.8 6.3v5"/>'),
     zoomout: svgIcon('<circle cx="8.8" cy="8.8" r="5.6"/><path d="M13 13l4.3 4.3"/><path d="M6.3 8.8h5"/>'),
     zoom1: svgIcon('<circle cx="8.8" cy="8.8" r="5.6"/><path d="M13 13l4.3 4.3"/><text x="8.8" y="10.9" font-size="5.6" font-weight="bold" text-anchor="middle" fill="currentColor" stroke="none" font-family="monospace">1:1</text>'),
@@ -3207,6 +3438,7 @@ atlas.onMapLoad((map) => {
     window.open("play.html", "rpgatlas_play");
   } });
   act("mapprops", { label: "Map Properties…", run: openMapProps });
+  act("hdpreview", { label: "HD-2D Preview", icon: "hd2d", tip: "Toggle the live HD-2D preview panel (uses this map's HD-2D settings)", active: () => !!hdPanel, run: toggleHdPreview });
 
   act("undo", { label: "Undo", icon: "undo", key: "Ctrl+Z", enabled: () => undoStack.length > 0, run: undo });
   act("redo", { label: "Redo", icon: "redo", key: "Ctrl+Y", enabled: () => redoStack.length > 0, run: redo });
@@ -3218,6 +3450,9 @@ atlas.onMapLoad((map) => {
   act("mode-map", { label: "Map (Tile) Mode", icon: "map", tip: "Tile layer — draw the map", active: () => mode === "map", run: () => setMode("map") });
   act("mode-event", { label: "Event Mode", icon: "event", tip: "Event layer — place and edit events", active: () => mode === "event", run: () => setMode("event") });
   act("mode-pass", { label: "Passability Mode", icon: "pass", tip: "Passability — click tiles to cycle auto → ✕ block → ○ pass", active: () => mode === "pass", run: () => setMode("pass") });
+  act("mode-height", { label: "Height Mode (HD-2D)", icon: "height", key: "H",
+    tip: "Heights — paint HD-2D elevation with the Pen / Rectangle / Circle / Fill tools (keys 0–9 set the value)",
+    active: () => mode === "height", run: () => setMode("height") });
   act("mode-start", { label: "Set Start Position…", active: () => mode === "start", run() {
     setMode("start");
     flashStatus("Click the map to set the player start position");
@@ -3231,8 +3466,8 @@ atlas.onMapLoad((map) => {
   [["pen", "B"], ["erase", "E"], ["rect", "R"], ["circle", "O"], ["fill", "F"], ["shadow", "S"]].forEach(([t, key]) => {
     act("tool-" + t, { label: TOOL_LABELS[t], icon: t, key,
       tip: t === "shadow" ? "Shadow Pen — left paints a shadow quadrant, right erases" : TOOL_LABELS[t],
-      active: () => tool === t && mode === "map",
-      run() { if (mode !== "map") setMode("map"); setTool(t); } });
+      active: () => tool === t && (mode === "map" || mode === "height"),
+      run() { if (mode !== "map" && mode !== "height") setMode("map"); setTool(t); } });
   });
 
   act("zoomin", { label: "Zoom In", icon: "zoomin", key: "+", run: () => zoomStep(1) });
@@ -3253,12 +3488,12 @@ atlas.onMapLoad((map) => {
     ["new", "open", "save"],
     ["cut", "copy", "paste"],
     ["undo", "redo"],
-    ["mode-map", "mode-event", "mode-pass"],
+    ["mode-map", "mode-event", "mode-pass", "mode-height"],
     ["layer-auto", "layer-ground", "layer-decor", "layer-decor2", "layer-over"],
     ["tool-pen", "tool-erase", "tool-rect", "tool-circle", "tool-fill", "tool-shadow"],
     ["zoomin", "zoomout", "zoom1"],
     ["db", "plugins", "audio", "search", "resources", "chargen"],
-    ["play"],
+    ["hdpreview", "play"],
   ];
   function buildToolbar() {
     const bar = $("toolbar");
@@ -3291,12 +3526,12 @@ atlas.onMapLoad((map) => {
   const MENUS = [
     { label: "File", items: ["new", "open", "save", "export", "build", "-", "play"] },
     { label: "Edit", items: ["undo", "redo", "-", "cut", "copy", "paste", "-", "deselect"] },
-    { label: "Mode", items: ["mode-map", "mode-event", "mode-pass", "-", "mode-start"] },
+    { label: "Mode", items: ["mode-map", "mode-event", "mode-pass", "mode-height", "-", "mode-start"] },
     { label: "Draw", items: ["tool-pen", "tool-erase", "tool-rect", "tool-circle", "tool-fill", "tool-shadow"] },
     { label: "Layer", items: ["layer-auto", "layer-ground", "layer-decor", "layer-decor2", "layer-over"] },
     { label: "Scale", items: ["zoomin", "zoomout", "zoom1", "zoomfit"] },
     { label: "Tools", items: ["db", "plugins", "audio", "search", "resources", "chargen"] },
-    { label: "Game", items: ["play", "build", "-", "mapprops", "mode-start"] },
+    { label: "Game", items: ["play", "build", "-", "mapprops", "hdpreview", "mode-start"] },
     { label: "Help", items: ["help", "about"] },
   ];
   let menuOpenRef = null;
@@ -3467,6 +3702,11 @@ atlas.onMapLoad((map) => {
         }
         return;
       }
+      if (mode === "height" && /^Digit\d$/.test(e.code)) { // 0–9 set the painted elevation
+        heightVal = Number(e.code.slice(5));
+        setStatus();
+        return;
+      }
       switch (e.code) {
         case "KeyB": runAct("tool-pen"); break;
         case "KeyE": runAct("tool-erase"); break;
@@ -3474,6 +3714,7 @@ atlas.onMapLoad((map) => {
         case "KeyO": runAct("tool-circle"); break;
         case "KeyF": runAct("tool-fill"); break;
         case "KeyS": runAct("tool-shadow"); break;
+        case "KeyH": runAct("mode-height"); break;
         case "Digit0": runAct("layer-auto"); break;
         case "Digit1": runAct("layer-ground"); break;
         case "Digit2": runAct("layer-decor"); break;

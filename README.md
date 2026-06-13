@@ -40,8 +40,10 @@ plus an icon toolbar with everything one click away.
 | **Map mode** | Paint tiles on 4 layers (Ground / Decor / Decor 2 / Overhead) with Pen, Eraser, Rectangle, Circle, Fill and Shadow Pen tools — or use the **Auto layer**, which sorts terrain vs. decorations for you |
 | **Event mode** | Double-click a cell to create/edit an event; drag events to move them |
 | **Passability mode** | See ○/✕ for every tile and click to override (auto → force block → force pass) |
-| **Cut / Copy / Paste** | Shift+drag selects a tile region (all layers + shadows); events copy/paste too |
-| **Undo / Redo** | Full-map history for tiles, shadows, passability and events |
+| **Height mode (HD-2D)** | Paint per-tile elevation with the same Pen/Rectangle/Circle/Fill tools (keys 0–9 set the value); raised tiles extrude into 3D blocks in HD-2D rendering |
+| **HD-2D rendering** | Per-map opt-in WebGL2 mode: tilted perspective camera, extruded terrain, billboard sprites, bloom, depth of field, distance fog and point lights (events named `light #rrggbb radius`); live preview panel in the editor; falls back to the classic 2D renderer automatically |
+| **Cut / Copy / Paste** | Shift+drag selects a tile region (all layers + shadows + heights); events copy/paste too |
+| **Undo / Redo** | Full-map history for tiles, shadows, heights, passability and events |
 | **Database** | Actors, Classes, Skills, Items, Weapons, Armors, Enemies, Troops, States, Switches, Variables, System |
 | **System tab** | Game screen width/height, UI area size, screen scale, message & menu fonts, font size, window opacity, remappable system sounds & music themes, side-view or front-view battles, start-transparent player |
 | **States** | Poison / stun / regen-style battle effects with per-turn HP %, act restriction, duration and battle-end removal; skills can inflict or cure them |
@@ -50,7 +52,7 @@ plus an icon toolbar with everything one click away.
 | **Event Searcher** | Find message text, event names, or switch/variable usage across all maps |
 | **Resource Manager** | Browse every generated tile/character/battler; export PNGs (incl. full sprite sheets) |
 | **Character Generator** | Compose original walking sprites (skin/hair/outfit/style) usable everywhere |
-| **Map Properties** | Rename/resize maps, set music, configure random encounters |
+| **Map Properties** | Rename/resize maps, set music, configure random encounters, enable HD-2D (camera tilt, bloom, depth of field, fog color, lights, ambient) |
 | **Open / Export** | Back up the project as `.json` or export a self-contained Windows `.exe` / playable `.html` |
 
 ## Custom assets

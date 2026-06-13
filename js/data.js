@@ -188,6 +188,7 @@ const RA = {
       if (!m.layers.decor2 || m.layers.decor2.length !== n) m.layers.decor2 = new Array(n).fill(0);
       if (!m.shadows || m.shadows.length !== n) m.shadows = new Array(n).fill(0);
       if (!m.passOv || m.passOv.length !== n) m.passOv = new Array(n).fill(0);
+      if (!m.heights || m.heights.length !== n) m.heights = new Array(n).fill(0);
     }
     // Pre-rebrand projects carry Drift_* built-ins: rename them to Atlas_* and
     // refresh their engine-maintained code (Atlas_Core keeps a window.Drift
@@ -233,6 +234,7 @@ const DataDefaults = (() => {
       },
       shadows: new Array(n).fill(0),   // 4-bit quadrant mask per tile: 1=TL 2=TR 4=BL 8=BR
       passOv: new Array(n).fill(0),    // passability override: 0=auto 1=force pass 2=force block
+      heights: new Array(n).fill(0),   // HD-2D elevation in tile units (visual only; 0 = flat)
       events: [],
     };
   }
