@@ -2151,7 +2151,7 @@ const editorI18n = createEditorI18n({
   ];
   const cmdDef = (t) => CMD_DEFS.find((d) => d.t === t);
 
-  function editCommand(c, onDone) {
+  function editCommand(c, onDone, skipSnapshot, snapFn) {
     const def = cmdDef(c.t);
     const box = h("div");
     const apply = def.form(c, box) || (() => {});
@@ -2159,7 +2159,7 @@ const editorI18n = createEditorI18n({
       title: def.label,
       content: box,
       buttons: [
-        { label: "OK", primary: true, onClick(close) { apply(); close(); touch(); onDone(); } },
+        { label: "OK", primary: true, onClick(close) { if (!skipSnapshot && snapFn) snapFn(); apply(); close(); touch(); onDone(); } },
         { label: "Cancel", onClick(close) { close(); onDone(); } },
       ],
       dismissable: false,
@@ -2271,9 +2271,10 @@ const editorI18n = createEditorI18n({
       }
     });
   }
-  function cmdListWidget(getList) {
+  function cmdListWidget(getList, undoApi) {
     const wrap = h("div", { class: "cmdlist-wrap" });
     const listEl = h("div", { class: "cmdlist", tabindex: "0" });
+    const snap = undoApi.snapshot;             // snapshot before a mutation
     let selRow = null, anchorRow = null, rows = [], dragFromIdx = null, cmdMenuEl = null;
     let dragBlock = null, dragFromArr = null, dragFrom = 0, dragCount = 0;
     function clearDropMarks() {
@@ -2361,6 +2362,7 @@ const editorI18n = createEditorI18n({
           }
           clearDropMarks();
           if (dragFromArr === toArr && to >= dragFrom && to <= dragFrom + dragCount) { dragBlock = null; dragFromIdx = null; return; } // lands inside itself
+          snap();
           dragFromArr.splice(dragFrom, dragCount);
           if (dragFromArr === toArr && to > dragFrom) to -= dragCount; // adjust for the gap we just removed
           toArr.splice(to, 0, ...dragBlock);
@@ -2385,20 +2387,22 @@ const editorI18n = createEditorI18n({
       let target = r2 || cur();
       if (!target || (!target.slot && !target.cmd)) target = { arr: getList(), idx: getList().length };
       pickCommand((nc) => {
+        snap();
         target.arr.splice(target.idx, 0, nc);
         touch();
-        editCommand(nc, redraw);
+        editCommand(nc, redraw, true);   // suppress: this snapshot already covers the whole add
         redraw(nc);
       });
     }
     function editAt(r2) {
       const target = r2 || cur();
       if (!target || !target.cmd) return;
-      editCommand(target.cmd, redraw);
+      editCommand(target.cmd, redraw, false, snap);   // edit path snapshots on OK (before apply)
     }
     function delAt() {
       const b = selBlock();
       if (!b) return;
+      snap();
       b.arr.splice(b.lo, b.count);
       touch();
       const survivor = b.arr.length ? b.arr[Math.min(b.lo, b.arr.length - 1)] : null;
@@ -2410,6 +2414,7 @@ const editorI18n = createEditorI18n({
       if (!b) return;
       if (d < 0 && b.lo <= 0) return;
       if (d > 0 && b.hi >= b.arr.length - 1) return;
+      snap();
       const blk = b.arr.splice(b.lo, b.count);
       b.arr.splice(b.lo + d, 0, ...blk);
       touch();
@@ -2421,6 +2426,7 @@ const editorI18n = createEditorI18n({
       clipCmd = b.cmds.map((c) => RA.clone(c));
       flashStatus((cut ? "Cut " : "Copied ") + b.count + (b.count > 1 ? " commands" : " command"));
       if (cut) {
+        snap();
         b.arr.splice(b.lo, b.count);
         touch();
         const survivor = b.arr.length ? b.arr[Math.min(b.lo, b.arr.length - 1)] : null;
@@ -2437,6 +2443,7 @@ const editorI18n = createEditorI18n({
       else if (target && target.slot) { arr = target.arr; idx = target.idx; } // at the insertion slot
       else { arr = getList(); idx = getList().length; }                       // nothing selected → end of list
       const clones = block.map((c) => RA.clone(c));
+      snap();
       arr.splice(idx, 0, ...clones);
       touch(); redraw(clones); // select the pasted block so repeated Ctrl+V stacks
     }
@@ -2495,9 +2502,10 @@ const editorI18n = createEditorI18n({
       h("button", { onclick: () => moveSel(-1) }, "↑"),
       h("button", { onclick: () => moveSel(1) }, "↓"),
     );
-    // Ctrl+C/X/V work when the command list has focus. The global editor shortcuts are
-    // suppressed while a modal is open, so there's no collision with map copy/paste.
+    // Ctrl+C/X/V and Delete work when the command list has focus. The global editor shortcuts
+    // are suppressed while a modal is open, so there's no collision with map copy/paste.
     listEl.addEventListener("keydown", (e) => {
+      if (e.code === "Delete") { e.preventDefault(); delAt(); return; }
       if (!(e.ctrlKey || e.metaKey)) return;
       if (e.code === "KeyC") { e.preventDefault(); copySel(false); }
       else if (e.code === "KeyX") { e.preventDefault(); copySel(true); }
@@ -2513,22 +2521,78 @@ const editorI18n = createEditorI18n({
   function openEventEditor(evOriginal) {
     const ev = RA.clone(evOriginal);
     let pageIdx = 0;
+
+    // Per-page command undo/redo, keyed by page object; discarded with `ev` when the editor closes.
+    const cmdHist = new Map();                 // page -> { undo, redo }
+    function histFor(p) {
+      let hst = cmdHist.get(p);
+      if (!hst) { hst = { undo: [], redo: [] }; cmdHist.set(p, hst); }
+      return hst;
+    }
+    const curPage = () => ev.pages[pageIdx];
+    function cmdSnapshot() {                    // call before mutating the current page's commands
+      const hst = histFor(curPage());
+      hst.undo.push(RA.clone(curPage().commands));
+      if (hst.undo.length > 60) hst.undo.shift();
+      hst.redo.length = 0;
+    }
+    function cmdStep(from, to) {
+      const hst = histFor(curPage());
+      if (!hst[from].length) { flashStatus(from === "undo" ? "Nothing to undo" : "Nothing to redo"); return false; }
+      hst[to].push(RA.clone(curPage().commands));
+      curPage().commands = RA.clone(hst[from].pop());   // re-clone so the archived entry stays immutable
+      touch();
+      return true;
+    }
+    const undoApi = {
+      snapshot: cmdSnapshot,
+      undo: () => cmdStep("undo", "redo"),
+      redo: () => cmdStep("redo", "undo"),
+    };
+    // Editor-wide keys (selection ≠ focus): Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z undo/redo commands,
+    // and Delete removes the highlighted page (the command list handles its own Delete). Defers
+    // to native field editing and stays inert while a nested Add/Edit dialog is the topmost modal.
+    let evOverlay = null;
+    function onEvKey(e) {
+      if (modalRoot().lastElementChild !== evOverlay) return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+      if (e.ctrlKey || e.metaKey) {
+        if (e.code === "KeyZ" && e.shiftKey) { e.preventDefault(); if (undoApi.redo()) redrawPage(); }
+        else if (e.code === "KeyZ") { e.preventDefault(); if (undoApi.undo()) redrawPage(); }
+        else if (e.code === "KeyY") { e.preventDefault(); if (undoApi.redo()) redrawPage(); }
+        return;
+      }
+      if (e.code === "Delete" && !(t && t.closest && t.closest(".cmdlist"))) {
+        e.preventDefault();
+        deletePage(pageIdx);
+      }
+    }
+    document.addEventListener("keydown", onEvKey);
+
     const head = h("div");
     const tabs = h("div", { class: "tabs" });
     const pageBox = h("div");
 
+    function deletePage(i) {
+      if (ev.pages.length <= 1) return;
+      const del = () => {
+        ev.pages.splice(i, 1);
+        if (pageIdx > i) pageIdx--;
+        pageIdx = Math.min(pageIdx, ev.pages.length - 1);
+        redrawTabs(); redrawPage();
+      };
+      const n = ev.pages[i].commands.length;   // confirm only if there are commands to lose (can't be undone)
+      if (n) confirmBox("This page has " + n + " command" + (n === 1 ? "" : "s") + " that will be permanently lost. Delete this page?", del);
+      else del();
+    }
     function redrawTabs() {
       tabs.innerHTML = "";
       ev.pages.forEach((_, i) => {
         tabs.appendChild(h("button", { class: i === pageIdx ? "sel" : "", onclick() { pageIdx = i; redrawTabs(); redrawPage(); } }, "Page " + (i + 1)));
       });
       tabs.appendChild(h("button", { class: "mini", onclick() { ev.pages.push(DataDefaults.newPage()); pageIdx = ev.pages.length - 1; redrawTabs(); redrawPage(); } }, "+"));
-      tabs.appendChild(h("button", { class: "mini", onclick() {
-        if (ev.pages.length <= 1) return;
-        ev.pages.splice(pageIdx, 1);
-        pageIdx = Math.min(pageIdx, ev.pages.length - 1);
-        redrawTabs(); redrawPage();
-      } }, "−"));
+      tabs.appendChild(h("button", { class: "mini", title: "Delete this page", onclick() { deletePage(pageIdx); } }, "−"));
     }
     function redrawPage() {
       const pg = ev.pages[pageIdx];
@@ -2560,7 +2624,7 @@ const editorI18n = createEditorI18n({
       redrawPreview();
       pageBox.appendChild(condBox);
       pageBox.appendChild(appBox);
-      const cw = cmdListWidget(() => ev.pages[pageIdx].commands);
+      const cw = cmdListWidget(() => ev.pages[pageIdx].commands, undoApi);
       pageBox.appendChild(h("div", { class: "subhead" }, "Commands"));
       pageBox.appendChild(cw.el);
     }
@@ -2571,11 +2635,12 @@ const editorI18n = createEditorI18n({
     head.appendChild(pageBox);
     redrawTabs(); redrawPage();
 
-    modal({
+    const evModal = modal({
       title: "Event — " + esc(evOriginal.name),
       content: head,
       wide: true,
       dismissable: false,
+      onClose() { document.removeEventListener("keydown", onEvKey); },
       buttons: [
         { label: "OK", primary: true, onClick(close) {
           pushUndo();
@@ -2594,6 +2659,7 @@ const editorI18n = createEditorI18n({
         { label: "Cancel" },
       ],
     });
+    evOverlay = evModal.el.parentElement;
   }
 
   // ============================ database ============================

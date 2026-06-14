@@ -5,6 +5,19 @@
 export const PATCH_NOTES = [
   {
     date: "June 14, 2026",
+    title: "Undo, Redo & Delete-Key for Event Commands",
+    summary: "The event editor gains its own undo/redo and Delete-key shortcuts — conveniences RPG Maker never offered inside event editing.",
+    items: [
+      "Undo and redo adding, editing, deleting, moving, copy/cut/paste, and drag-reordering of commands, including multi-selected blocks and commands nested inside If/Choices branches.",
+      "Ctrl+Z undoes; Ctrl+Y or Ctrl+Shift+Z redoes — anywhere in the event editor, not only when the list is focused.",
+      "Each event page keeps its own command history, so undo never disturbs another page or your page condition/appearance settings.",
+      "Press Delete to remove the selected command(s) from the Commands list — and Ctrl+Z brings them back.",
+      "Press Delete to remove the highlighted page, or use the − button; pages that still hold commands ask to confirm first.",
+      "Command history lasts while the event editor is open; clicking OK still commits the whole event as a single undo step on the map.",
+    ],
+  },
+  {
+    date: "June 14, 2026",
     title: "Multilingual Editor Interface",
     summary: "Added a persistent interface-language module so creators can use the editor chrome in English, Spanish, French, or German.",
     items: [
