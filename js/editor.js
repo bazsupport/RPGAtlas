@@ -4477,7 +4477,7 @@ atlas.onMapLoad((map) => {
   act("play", { label: "Playtest", icon: "play", tip: "Save and run the game", run() {
     saveNow();
     if (host.isTauri) {
-      host.openPlaytest().catch((e) => alert("Could not open play-test window: " + e.message));
+      host.openPlaytest().catch((e) => alert("Could not open play-test window: " + ((e && e.message) || e)));
     } else {
       window.open("play.html", "rpgatlas_play");
     }

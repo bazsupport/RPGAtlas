@@ -18,6 +18,17 @@
         "height": 800,
         "minWidth": 900,
         "minHeight": 600,
+        "useHttpsScheme": true,
+        "resizable": true
+      },
+      {
+        "label": "playtest",
+        "title": "RPGAtlas — Playtest",
+        "url": "play.html",
+        "width": 816,
+        "height": 624,
+        "visible": false,
+        "useHttpsScheme": true,
         "resizable": true
       }
     ],

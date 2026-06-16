@@ -5,7 +5,7 @@
    commands give it the few things a browser tab cannot do well: native file
    dialogs for project save/load, and a dedicated window for play-testing. */
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 
 /// Save the editor's project JSON to a user-chosen file. Returns the chosen
@@ -66,16 +66,19 @@ fn open_project(app: tauri::AppHandle) -> Result<Option<String>, String> {
 /// reads the project the editor just autosaved.
 #[tauri::command]
 fn open_playtest(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(existing) = app.get_webview_window("playtest") {
-        existing.set_focus().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
+    // The play-test window is declared in tauri.conf.json and created at startup
+    // (hidden). Building a window on demand from inside a command instead causes
+    // a blank/frozen webview, so we reuse the pre-built one: reload it to re-read
+    // the project the editor just autosaved, then show and focus it. Closing it
+    // only hides it (see the window-event handler in `run`), so it is always
+    // here to reuse, no matter how many times the user plays and closes.
+    let playtest = app
+        .get_webview_window("playtest")
+        .ok_or_else(|| "Play-test window was not initialized.".to_string())?;
 
-    WebviewWindowBuilder::new(&app, "playtest", WebviewUrl::App("play.html".into()))
-        .title("RPGAtlas — Playtest")
-        .inner_size(816.0, 624.0)
-        .build()
-        .map_err(|e| e.to_string())?;
+    playtest.reload().map_err(|e| e.to_string())?;
+    playtest.show().map_err(|e| e.to_string())?;
+    playtest.set_focus().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -83,6 +86,18 @@ fn open_playtest(app: tauri::AppHandle) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|window, event| {
+            // Hide the play-test window on close rather than destroying it, so it
+            // can be reused for every subsequent play-test. Destroying it would
+            // free its "playtest" label and leave nothing for open_playtest to
+            // reopen. The main window keeps the default behavior (quits the app).
+            if window.label() == "playtest" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             save_project,
             save_project_to_path,
