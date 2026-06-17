@@ -18,14 +18,24 @@ poll/setBindings/beginCapture/label`. Bindings: `{keyboard:{action:[e.code]}, ga
 `proj.system.input` (`RA.defaultInput()`); per-player override persisted at
 `rpgatlas_<gameId>_options`, merged on top at boot via `RA.mergeInputBindings`.
 
-**Status (2026-06-16):** Phases 1–4 + a Phase-4 UX rework are committed; all headless tests pass
-(`tests/input*.test.js`). **Pending baz's in-browser validation.** Notable: directions bind D-Pad +
-left stick (`lstick_*`) and both are editable; in-game **Options** menu (Music folded in) with an
-**editable add/replace/remove** rebinder; centered windows; capture uses ignore-held-until-release.
+**Status (2026-06-17):** Phases 1–5 committed and **baz-validated in-browser**; all headless tests
+pass (`tests/input*.test.js`). Nothing pushed. Phase-4 = in-game **Options** menu (Music folded in)
+with an editable add/replace/remove rebinder, centered windows, capture-ignore-held-until-release;
+directions bind D-Pad + left stick (`lstick_*`), both editable. **Phase 5** (commits `750f279`,
+`712209d`) added: editor author-defaults grid in its own **"Controls"** Database tab; **procedural
+canvas glyphs** (`Assets.inputGlyphCanvas/DataUrl/Html`); the **`\input[action]`** message text-code;
+shared label/glyph helpers moved into `RA` (`codeLabel`/`glyphText`/`glyphShape`, family-aware) with
+`input.js`/`assets.js` delegating lazily; **distinct d-pad/stick/L3 shapes**; and **controller
+families** (`RA.padFamilyFromId` + `Input.padFamily()` auto-detect Xbox/PS/Switch from `Gamepad.id`)
+as a **pure display layer** — bindings stay POSITIONAL, editor brand-preview is never persisted,
+**relabel only (no Nintendo confirm/cancel semantic swap)**. Also: START is unbound by default now
+(`cancel` = `face_east`).
 
-**Next:** (1) baz validates the rework; (2) one-time `localStorage` refresh of his existing "Atlas
-Quest" project (stored gamepad bindings predate `lstick_*` — see HANDOFF §3); (3) **Phase 5** — editor
-author-defaults grid, the `buildStandaloneGame` classic-script export rewrite (**export is already
-broken on upstream independently** of this feature) + verify an exported HTML boots with a gamepad,
-patch-notes entry, and fix the pre-existing `tests/modules.test.mjs` failure. PR only after baz
-approves ([[validate-before-pr]]).
+**Next:** (1) optional — upgrade the in-game rebinder rows from text to procedural glyphs (engine
+`controlsDevice`/`actionBindings`, via `Assets.inputGlyphHtml(...,Input.padFamily())`); (2)
+`buildStandaloneGame` classic-script export rewrite (**export already broken on upstream
+independently**) + verify an exported HTML boots, takes a gamepad, renders glyphs/`\input`; (3)
+deferred design — Nintendo confirm/cancel **semantic** swap (per-family binding overrides; design with
+baz first); (4) one-time `localStorage` refresh of his "Atlas Quest" project if its bindings predate
+`lstick_*`; (5) fix the pre-existing `tests/modules.test.mjs` `window` failure. PR only after baz
+validates everything and explicitly approves ([[validate-before-pr]]).

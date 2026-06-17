@@ -76,7 +76,7 @@ generic positional names: `face_south/east/west/north`, `dpad_*`, `lstick_*`, `b
 reset, persisted per-player), editor author-defaults, generic text prompts (no glyph art), grid
 movement so the stick reads 4/8-way.
 
-### Done (on `feature/gamepad-support`, committed, all headless tests green — pending browser validation)
+### Done (on `feature/gamepad-support`, committed, all headless tests green — Phases 1–5 baz-validated in-browser; not pushed)
 
 - **Phase 1 — schema/defaults** (`js/data.js`): `RA.PAD_BUTTONS`, `RA.INPUT_ACTIONS`,
   `RA.defaultInput()`, pure `RA.mergeInputBindings(projInput, override)` and
@@ -87,8 +87,9 @@ movement so the stick reads 4/8-way.
   **capture > menu (UIStack) > map edge**. Engine refactored to read named actions
   (`Input.dir/pressed/consume`) instead of the old `keyName`/loose trigger vars.
 - **Phase 3 — gamepad poller:** W3C Standard Gamepad mapping, stick→synthetic names past deadzone,
-  menu DAS/ARR auto-repeat, lazy connect/disconnect, `activeDevice()`. (START shares the `cancel`
-  action so it opens/closes the menu.)
+  menu DAS/ARR auto-repeat, lazy connect/disconnect, `activeDevice()`. (START is **unbound by
+  default**; `cancel` = `face_east` (B) opens/closes the menu — START used to share `cancel` but was
+  split off during the Phase-4 polish.)
 - **Phase 4 + REWORK — options store + rebinder + Music** (`js/engine.js`, `css/play.css`):
   per-player options store `rpgatlas_<gameId>_options` (mirrors `saveKey()`), boot merge over
   author defaults, Music-toggle persistence. The **first Phase-4 pass was rejected on validation**
@@ -110,37 +111,71 @@ movement so the stick reads 4/8-way.
     as "D-Pad Up / L-Stick Up".
   - **Centering fix:** Options/conflict/reset windows no longer use the bottom-right `choicewin`
     class — they're centered (new `.optionswin`, `css/play.css`).
-- **Tests:** `tests/input.test.js`, `tests/input-pad.test.js`, `tests/input-capture.test.js`
-  (all pass alongside the pre-existing suites).
+- **Phase 5 — editor grid + procedural glyphs + platform families** (`js/data.js`, `js/assets.js`,
+  `js/runtime/input.js`, `js/engine.js`, `js/editor.js`, `css/editor.css`, `css/play.css`; commits
+  `750f279` then `712209d`; **baz-validated in-browser**):
+  - **Editor author-defaults grid** in its own new **"Controls"** Database tab (moved out of the
+    crowded System tab; System now just points to it). Per-device add (keyboard key-capture / gamepad
+    glyph picker), remove, critical-action guard, reset-to-defaults. **Replaces the old localStorage
+    console snippet** for editing `proj.system.input`.
+  - **Procedural input glyphs** (canvas-drawn, no art): `Assets.inputGlyphCanvas/DataUrl/Html`. Used
+    in the grid, the gamepad picker, and the new **`\input[action]`** message text-code (engine pushes
+    a `Plugins.textProcessors` entry; emits an `<img class="msg-icon">` so the typewriter counts it as
+    one char; device chosen from `Input.activeDevice()` at message-open, with device fallback).
+  - **Shared label/glyph subsystem moved into `RA`** (both shells load `data.js`; `input.js` and
+    `assets.js` delegate **lazily** because they load before `data.js`): `RA.codeLabel` (verbose),
+    `RA.glyphText` (compact draw token), `RA.glyphShape` (`face|dpad|stick|stick_click|pill`).
+  - **Distinct shapes:** d-pad cross, analog-stick ring, and L3/R3 stick-click — so d-pad ≠ stick.
+  - **Controller families = a DISPLAY layer (no schema change, bindings stay POSITIONAL):**
+    `RA.padFamilyFromId(id)` + `Input.padFamily()` auto-detect Xbox / PlayStation / Switch from
+    `Gamepad.id`; `RA.glyphText`/`RA.codeLabel`/the glyph renderer take a `family` (default `"xbox"`,
+    so old call sites are unchanged); in-game rebinder text + `\input` glyphs follow the connected
+    pad; the editor Controls tab has a **display-only** brand preview (sits in the Gamepad column
+    header; **never persisted** to the project). **Relabel only — NO Nintendo confirm/cancel semantic
+    swap.**
+- **Tests:** `tests/input.test.js` (+glyphShape / per-family labels / `padFamilyFromId`),
+  `tests/input-pad.test.js`, `tests/input-capture.test.js` (all pass alongside the pre-existing
+  suites; `tests/modules.test.mjs` has a known unrelated `window is not defined` failure).
 
 ### Next
 
-1. **baz to validate the Phase-4 rework in the browser** (`play.html`, hard-reload): centered
-   Options window; gamepad direction rows show "D-Pad Up / L-Stick Up" and the stick is
-   add/replace/removable; add/replace/remove a binding; conflict→Replace; Reset to Defaults; Music
-   toggle persists and shows once.
-2. **One-time refresh of his existing "Atlas Quest" project** (its stored gamepad bindings predate
-   `lstick_*`, so the stick would be dead until refreshed). In the browser console on `play.html`
-   (type `allow pasting` first if warned):
+The input/gamepad feature (Phases 1–5) is functionally complete and **baz-validated in-browser**.
+Nothing is pushed. Remaining, roughly in priority order — **confirm the next step with baz before
+coding** (he drives):
+
+1. **In-game rebinder glyph upgrade (optional polish):** `engine.js` `controlsDevice` /
+   `actionBindings` (~line 1885 / 1904) still render bindings as **text** (`Input.label` /
+   `Input.codeLabel`). They auto-relabel per controller family already, but could draw the same
+   procedural glyphs as the editor grid via `Assets.inputGlyphHtml(device, code, Input.padFamily())`
+   for visual consistency.
+2. **Standalone-export rewrite + verify** (`js/editor/project-io.js` `buildStandaloneGame`): rewrite
+   to the classic-script chain (the export is **already broken on upstream** independently of this
+   feature — importmap/`type=module` wiring + missing renderer/plugins/quests/journal-view scripts),
+   then **confirm an exported HTML boots, takes a gamepad, and renders glyphs + `\input[...]`** (glyphs
+   are procedural so they inline for free — the breakage is the module wiring, not the glyphs).
+3. **Deferred design — Nintendo confirm/cancel SEMANTIC swap:** families are relabel-only today
+   (confirm is always the south button, shown as "B" on Switch). A true platform swap (confirm→east
+   on Switch) needs per-family binding overrides; **design with baz before building.** Also out of
+   scope by decision: paddles / extra buttons beyond the W3C-standard 16.
+4. **One-time `localStorage` refresh** of baz's pre-existing "Atlas Quest" project may still be
+   needed (its stored gamepad bindings predate `lstick_*`); snippet below. New projects are fine.
+5. **Fix the pre-existing `tests/modules.test.mjs` failure** (`window is not defined` at
+   `messages.js` loaded as a `data:` ESM in Node) — unrelated to this feature.
+6. **Only after baz validates everything + explicitly approves:** rebase onto `upstream/main` (keep
+   BOTH sides), confirm the maintainer wants it / isn't mid-flight, then the upstream PR. **Write/
+   outward `gh` needs per-action approval, every time** ([[validate-before-pr]]).
+
+   Atlas-Quest refresh snippet (browser console on `play.html`; type `allow pasting` first if warned):
    ```js
    const p = JSON.parse(localStorage.rpgatlas_project); delete p.system.input;
    localStorage.rpgatlas_project = JSON.stringify(p); localStorage.removeItem('rpgatlas_options');
    location.reload();
    ```
-   (New projects are correct automatically; only his pre-existing local project needs this.)
-3. **Phase 5** (not started): editor System-tab **author-defaults grid** (full binding arrays, no
-   truncation); finish/extend `Input.label` prompts; **`js/editor/project-io.js` `buildStandaloneGame`
-   export rewrite** to the classic-script chain (the standalone export is **already broken on
-   upstream** independent of this feature — importmap/`type=module` wiring + missing
-   renderer/plugins/quests/journal-view scripts) and **verify an exported HTML actually boots and
-   takes a gamepad**; a `js/patch-notes.js` entry. Also repair the pre-existing
-   `tests/modules.test.mjs` failure.
-4. **Only after baz validates everything:** consider the upstream PR (confirm the maintainer wants
-   it / isn't mid-flight first). Rebase onto `upstream/main`, keep both sides' work.
 
-The full design lives in baz's local plan `~/.claude/plans/swift-cooking-ladybug.md` (machine-local;
-**won't exist on the other machine** — its substance is folded into this file). The standalone-export
-section there has the exact script chain to mirror.
+The original design plan `~/.claude/plans/swift-cooking-ladybug.md` (gamepad) and a later plan for the
+glyph/family pass are **machine-local** (`~/.claude/plans/…`, absent on other machines) — their
+substance is folded into this file. The standalone-export section of the gamepad plan has the exact
+classic-script chain to mirror.
 
 ## 4. Conventions / patterns to follow
 
