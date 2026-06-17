@@ -25,6 +25,7 @@ export const PATCH_NOTES = [
        "Gamepad glyphs auto-detect the player's controller and relabel for Xbox (A/B/X/Y), PlayStation (Cross/Circle/Square/Triangle), and Nintendo Switch (B/A/Y/X); the editor Controls tab has a per-brand preview.",
        "Distinct procedural icons for the D-Pad, analog stick, and stick-clicks (L3/R3), so on-screen directions no longer all look the same.",
        "New \\input[action] message code shows the glyph for a bound control (e.g. \"Press \\input[ok] to continue\"), matching keyboard or gamepad to the device in use when the message opens.",
+       "Show Text and Show Choices now include a built-in \"Text codes\" reference, so you can recall every code (including \\input[...]) without leaving the message editor.",
        "Input-prompt glyphs are generated procedurally, so they need no extra art and carry into standalone exports automatically.",
      ],
    },

@@ -1901,6 +1901,30 @@ const editorI18n = createEditorI18n({
     });
   }
 
+  // Collapsible reminder of the message control codes, shown under Show Text / Show Choices so
+  // authors can recall what to type. The \input[...] action list is read from RA.INPUT_ACTIONS,
+  // so it stays in sync (and will auto-include any future custom actions).
+  function textCodesHelp() {
+    const acts = (RA.INPUT_ACTIONS || []).map((a) => a.key).join(", ");
+    const rows = [
+      ["\\v[n]", "variable value"],
+      ["\\n[n]", "actor name"],
+      ["\\g", "gold amount"],
+      ["\\input[action]", "button glyph for a control (action: " + acts + ")"],
+      ["\\i[n]", "inline icon"],
+      ["\\c[n] · \\c[#hex]", "text color"],
+      ["[b]…[/b] · [i]…[/i]", "bold / italic"],
+      ["[color=#hex]…[/color] · [size=n]…[/size]", "color / size"],
+    ];
+    return h("details", { class: "code-legend" },
+      h("summary", null, "Text codes"),
+      h("ul", { class: "code-legend-list" },
+        ...rows.map(([code, desc]) =>
+          h("li", null, h("code", null, code), h("span", { class: "cl-desc" }, " — " + desc)))),
+      h("div", { class: "cl-note" },
+        "\\i, \\c and the [b]/[i]/[color]/[size] tags need the Atlas_TextCodes plugin (on by default)."));
+  }
+
   // each entry: label, make(), form(c, box) -> apply()
   const CMD_DEFS = [
     { t: "text", label: "Show Text", make: () => ({ t: "text", name: "", face: "", text: "" }),
@@ -1915,7 +1939,8 @@ const editorI18n = createEditorI18n({
         const ta = h("textarea", { rows: 4, oninput(e) { w.text = e.target.value; } }, c.text);
         box.appendChild(row(field("Speaker name (optional)", tIn(w, "name")),
           field("Face (optional)", sel(w, "face", charsetOpts(true), redrawFace)), preview));
-        box.appendChild(field("Text  (\\v[n]=variable, \\n[id]=actor name, \\g=gold, \\i[n]=icon)", ta));
+        box.appendChild(field("Text", ta));
+        box.appendChild(textCodesHelp());
         redrawFace();
         return () => { c.name = w.name; c.face = w.face; c.text = w.text; };
       } },
@@ -1923,6 +1948,7 @@ const editorI18n = createEditorI18n({
       form(c, box) {
         const ta = h("textarea", { rows: 4 }, c.options.join("\n"));
         box.appendChild(field("Choices (one per line)", ta));
+        box.appendChild(textCodesHelp());
         return () => {
           const opts = ta.value.split("\n").map((s) => s.trim()).filter(Boolean);
           if (!opts.length) opts.push("OK");

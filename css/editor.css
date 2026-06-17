@@ -247,9 +247,8 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--gold-edge);
 .input-row { display: contents; }
 .input-act { font-size: 13px; color: #cdd2e4; }
 .input-head .input-act, .input-head .bind-cell { font-weight: 600; color: #8a8da4; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-.input-head .input-act, .input-head .bind-cell { align-self: start; } /* top-align the three column headers */
-.gp-head { flex-direction: column; align-items: flex-start; gap: 3px; }
-.gp-preview { display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.gp-head { flex-direction: row; align-items: center; gap: 8px; } /* "Gamepad" + Preview on one line */
+.gp-preview { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; }
 .gp-preview > span { color: #8a8da4; font-size: 11px; }
 .gp-preview select { font-size: 12px; padding: 1px 4px; }
 .bind-cell { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 26px; }
@@ -402,6 +401,17 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--gold-edge);
   background: #2a2d40; border: 1px solid #44485f; border-bottom-width: 2px;
   border-radius: 4px; padding: 0 5px; font: 11px Consolas, monospace;
 }
+/* Collapsible message text-codes reference under Show Text / Show Choices */
+.code-legend { margin: 2px 0 6px; }
+.code-legend > summary { cursor: pointer; color: #8a8da4; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; user-select: none; }
+.code-legend > summary:hover { color: #cdd2e4; }
+.code-legend-list { margin: 6px 0 2px; padding-left: 2px; list-style: none; line-height: 1.8; }
+.code-legend-list code {
+  background: #2a2d40; border: 1px solid #44485f; border-radius: 4px;
+  padding: 0 5px; font: 11px Consolas, monospace; color: #e8cfa0;
+}
+.code-legend-list .cl-desc { color: #aab0c6; font-size: 12px; }
+.code-legend .cl-note { color: #7f88a6; font-size: 11px; margin-top: 4px; }
 .patch-notes { display: flex; flex-direction: column; gap: 12px; }
 .patch-note { background: #1a1c28; border: 1px solid #30344b; border-radius: 7px; padding: 10px 12px; }
 .patch-note-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
