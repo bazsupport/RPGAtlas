@@ -18,24 +18,30 @@ poll/setBindings/beginCapture/label`. Bindings: `{keyboard:{action:[e.code]}, ga
 `proj.system.input` (`RA.defaultInput()`); per-player override persisted at
 `rpgatlas_<gameId>_options`, merged on top at boot via `RA.mergeInputBindings`.
 
-**Status (2026-06-17):** Phases 1–5 committed and **baz-validated in-browser**; all headless tests
-pass (`tests/input*.test.js`). Nothing pushed. Phase-4 = in-game **Options** menu (Music folded in)
-with an editable add/replace/remove rebinder, centered windows, capture-ignore-held-until-release;
-directions bind D-Pad + left stick (`lstick_*`), both editable. **Phase 5** (commits `750f279`,
-`712209d`) added: editor author-defaults grid in its own **"Controls"** Database tab; **procedural
-canvas glyphs** (`Assets.inputGlyphCanvas/DataUrl/Html`); the **`\input[action]`** message text-code;
-shared label/glyph helpers moved into `RA` (`codeLabel`/`glyphText`/`glyphShape`, family-aware) with
-`input.js`/`assets.js` delegating lazily; **distinct d-pad/stick/L3 shapes**; and **controller
-families** (`RA.padFamilyFromId` + `Input.padFamily()` auto-detect Xbox/PS/Switch from `Gamepad.id`)
-as a **pure display layer** — bindings stay POSITIONAL, editor brand-preview is never persisted,
-**relabel only (no Nintendo confirm/cancel semantic swap)**. Also: START is unbound by default now
-(`cancel` = `face_east`).
+**Status (2026-06-17):** feature-complete and **baz-validated in-browser**; entering PR-prep. All
+input headless tests pass (`tests/input*.test.js`, plus heights/textcodes/traits). Phases 1–5 plus
+two polish passes committed; nothing pushed. Highlights: in-game **Options** rebinder (add/replace/
+remove, capture-ignore-held); editor author-defaults grid in its own **"Controls"** Database tab;
+**procedural canvas glyphs** (`Assets.inputGlyphCanvas/DataUrl/Html`); the **`\input[action]`**
+message text-code; **controller families** (`RA.padFamilyFromId` + `Input.padFamily()` auto-detect
+Xbox/PS/Switch) as a **pure display layer** (bindings stay POSITIONAL; relabel only — no Nintendo
+confirm/cancel semantic swap). Latest passes: the **in-game rebinder now renders procedural glyphs**
+instead of text (`989309f`, baz-validated "looks amazing"); and **editor polish** (uncommitted) —
+Controls-tab header on one line (`ACTION/KEYBOARD/GAMEPAD` aligned, Preview dropdown to the right of
+Gamepad) + a collapsible **"Text codes" legend** on Show Text/Show Choices (`textCodesHelp()`, reads
+`RA.INPUT_ACTIONS` so it stays in sync). A comment-cleanup pass trimmed three stale `keyName()`/
+"phase 4" references; reviewers found nothing else.
 
-**Next:** (1) optional — upgrade the in-game rebinder rows from text to procedural glyphs (engine
-`controlsDevice`/`actionBindings`, via `Assets.inputGlyphHtml(...,Input.padFamily())`); (2)
-`buildStandaloneGame` classic-script export rewrite (**export already broken on upstream
-independently**) + verify an exported HTML boots, takes a gamepad, renders glyphs/`\input`; (3)
-deferred design — Nintendo confirm/cancel **semantic** swap (per-family binding overrides; design with
-baz first); (4) one-time `localStorage` refresh of his "Atlas Quest" project if its bindings predate
-`lstick_*`; (5) fix the pre-existing `tests/modules.test.mjs` `window` failure. PR only after baz
-validates everything and explicitly approves ([[validate-before-pr]]).
+**PR-prep TODO (in progress 2026-06-17):** (1) commit the uncommitted editor polish + comment cleanup;
+(2) **rebase onto `upstream/main`** — currently 5 ahead / 4 behind; (3) **drop the off-topic
+`.gitignore` change** added in `7d5f9c0` (it ignores `.claude/settings*`, which is already covered by
+local `.git/info/exclude` — unrelated to gamepad support and a tooling tell for an upstream PR);
+(4) reword the **`WIP: … (Phases 1–4 + rework)`** base commit — internal jargon for upstream;
+(5) **standalone-export verification** — `buildStandaloneGame` re-inlines runtime libs; confirm an
+exported HTML boots, takes a gamepad, renders glyphs/`\input` (export was already broken on upstream
+independently). Known non-blocker: the pre-existing `tests/modules.test.mjs` `window is not defined`
+failure is NOT from this feature (identical on `upstream/main`; `messages.js` is a classic script but
+the test imports it as ESM) — flag, don't fix here. PR only after baz validates everything and
+explicitly approves ([[validate-before-pr]]).
+
+**Deferred follow-on:** [[custom-input-actions]] — author-defined custom input actions (design pinned).
