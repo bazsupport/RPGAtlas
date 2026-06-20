@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Handoff & Memory (read first)
 
-- **Current status (2026-06-16):** mid-feature — full **gamepad + input-remapping** system. Code lives on branch `feature/gamepad-support` (Phases 1–4 + a Phase-4 UX rework done; all headless tests pass; **pending baz's browser validation**; Phase 5 = editor defaults grid + standalone-export rewrite + patch notes still to do).
+- **Current status (2026-06-20):** between features, clean slate. The gamepad + input-remapping system **shipped** (upstream PR #14/#15) and the recent event-editor work too; `main` is synced to `upstream/main` and pushed to `origin`. All headless tests pass. All local feature branches were deleted after confirming they're in `main`; only `main` remains locally. **Next: plan the next feature with baz** (see `HANDOFF.md` §3 for the still-deferred items: standalone-export verify, Nintendo semantic swap, custom input actions).
 - **Cross-machine handoff + project memory live on the `workspace` branch on `origin` (NOT in the working tree, NOT on the PR branch — keeps them out of upstream PRs).** At session start, fetch and read them:
   - `git fetch origin`
   - `git show origin/workspace:HANDOFF.md` — full pickup doc (working agreement, what's done/next, gotchas)

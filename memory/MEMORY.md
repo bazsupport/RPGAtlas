@@ -8,5 +8,5 @@ See `../HANDOFF.md` for full cross-machine pickup.
 - [validate-before-pr](validate-before-pr.md) — hard rule: no PR / no upstream push until baz validates and approves.
 - [fork-and-config-policy](fork-and-config-policy.md) — origin/upstream roles; CLAUDE.md & .claude/settings* stay local; gh approval policy.
 - [classic-script-contract](classic-script-contract.md) — engine/messages/input.js are CLASSIC scripts, not ES modules (CLAUDE.md is stale here).
-- [gamepad-input-effort](gamepad-input-effort.md) — current effort: gamepad + input remapping, status + PR-prep steps.
+- [gamepad-input-effort](gamepad-input-effort.md) — SHIPPED gamepad + input remapping (upstream PR #14/#15); design seam + still-deferred items.
 - [custom-input-actions](custom-input-actions.md) — deferred future goal: author-defined custom input actions (pinned design).
