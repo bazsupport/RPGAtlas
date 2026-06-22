@@ -12,6 +12,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Or check it out as files: `git worktree add ../RPGAtlas-workspace origin/workspace`
 - **Record new durable facts on the `workspace` branch under `memory/`** (one file per fact, frontmatter format) — **not** in `~/.claude` (that's per-machine and is now just a pointer here).
 
+## Working agreement
+
+1. **Ask, don't assume.** If intent, architecture, or requirements are unclear, ask before writing code. When running unattended, take the most reasonable interpretation, proceed, and log the assumption instead of blocking.
+2. **Match solution complexity to problem complexity.** Simple problems get the simplest thing that works; harder problems get a durable one. Before anything non-trivial, state the approach in two lines and name what it makes harder later. Don't write the shortcut that only passes the current test.
+3. **Don't touch unrelated code — but don't stay silent about it.** Surface design smells and bad code you hit so we can take them as a separate issue. No silent fixes, no silent ignoring.
+4. **Flag uncertainty explicitly.** If you're unsure, see rule 1. Where it's cheap, run a small, isolated, low-risk experiment and bring me the hypothesis and result. End every task by telling me what you did not do — skipped edge cases, deferred work, live assumptions.
+5. **Push back when it matters.** If you see a materially better path, say so before implementing: the tradeoff in a few bullets, the invariant it protects, how we'd verify it. Interrupt only for material tradeoffs or irreversible/risky work. For style or tiny refactors, just proceed.
+
 ## What this is
 
 RPGAtlas is a browser-based 2D RPG-making engine (editor + player) in the spirit of classic RPG Makers. It has **no package.json, no dependencies, and no build step** — all code is vanilla JS/HTML/CSS and all graphics are generated procedurally in JavaScript. License is GPL v3; every JS module carries a GPL header. (Legacy "Driftwood Engine" projects auto-migrate to RPGAtlas.)
