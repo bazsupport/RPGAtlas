@@ -10,3 +10,4 @@ See `../HANDOFF.md` for full cross-machine pickup.
 - [classic-script-contract](classic-script-contract.md) — engine/messages/input.js are CLASSIC scripts, not ES modules (CLAUDE.md is stale here).
 - [gamepad-input-effort](gamepad-input-effort.md) — SHIPPED gamepad + input remapping (upstream PR #14/#15); design seam + still-deferred items.
 - [custom-input-actions](custom-input-actions.md) — deferred future goal: author-defined custom input actions (pinned design).
+- [editor-keymap-design](editor-keymap-design.md) — editor keyboard-shortcut scheme + rules (positional vs semantic keys; keyless dialogs; registry-driven tooltips/overlay); upstream PR #17.

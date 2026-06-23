@@ -69,14 +69,25 @@ that supersedes the prose there and is easy to get wrong:
 Tests are plain Node scripts (`node:assert/strict`, run individually, e.g. `node tests/input.test.js`).
 No aggregate runner. Several headless tests load the browser libs into a `vm` context.
 
-## 3. Status — between features (2026-06-20)
+## 3. Status — keymap PR open, awaiting upstream review (2026-06-23)
 
-**No active feature; clean slate.** `main` is synced to `upstream/main` (`d7ce7f2` "Add HD-2D
-extrusion, export fix, CI & tests") and pushed to `origin/main`. All of baz's recent feature work has
-landed upstream and is in `main`. **All 12 headless test files pass** (`node tests/<name>.test.js` /
-`.mjs`). **Next step: plan the next feature with baz — he drives.**
+**Active feature branch `feature/editor-keymap` (on `origin`), open as upstream PR #17.** Editor
+keyboard-shortcut overhaul: `Tab`/`Shift+Tab` mode cycling, tools `Q W E R T Y`, layers `` ` `` `1 2 3 4`,
+`F1` Database / `F2` HD-2D Preview / `F5` Playtest, and a `?` shortcuts overlay. baz validated it
+in-browser and directed the PR himself. Design rationale (semantic vs positional keys; deliberately
+keyless dialogs): [[editor-keymap-design]]. **Next: watch for upstream review/merge of #17; nothing
+else queued — plan the next feature with baz.**
 
-**Branch hygiene snapshot (2026-06-20 cleanup):**
+`main` is synced to `upstream/main` at `0e7e698` (merge of PR #16 "Add Event-mode right-click menu and
+Quick Events") and pushed to `origin/main`. Headless tests still pass — ran `heights` / `textcodes` /
+`traits` / `modules`; the keymap touches only editor UI, which the headless suite doesn't cover (so it
+was verified manually in the browser).
+
+**Branch hygiene snapshot (updated 2026-06-23):**
+- **`feature/editor-keymap`** — current open branch (PR #17). On `origin`; **do not delete until #17 merges.**
+- **`feature/event-context-menu`** — merged via **PR #16** into `main`; the `origin` branch is now
+  redundant and safe to delete.
+- **Branch hygiene snapshot (2026-06-20 cleanup):**
 - **Deleted (confirmed merged into `main`):** `feature/gamepad-support`, `feature/event-window-redesign`,
   `feature/drag-reorder-commands` (the latter two are upstream PRs #9 and #4).
 - **Deleted (superseded):** `fix/grid-movement-jitter` — baz reimplemented grid-movement smoothing
